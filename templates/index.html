@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guitar Chord Visualizer</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-top: 0;
+        }
+        
+        .player-container {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: #f8f8f8;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .controls {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .play-button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            font-size: 16px;
+            margin-right: 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .play-button:hover {
+            background-color: #3e8e41;
+        }
+        
+        .time-display {
+            font-family: monospace;
+            font-size: 16px;
+            margin-left: 15px;
+            color: #555;
+        }
+        
+        .seekbar {
+            width: 100%;
+            height: 8px;
+            -webkit-appearance: none;
+            background-color: #ddd;
+            border-radius: 4px;
+            outline: none;
+            transition: opacity 0.2s;
+        }
+        
+        .seekbar::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #4CAF50;
+            cursor: pointer;
+        }
+        
+        /* Speed control styles */
+        .speed-control {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+            padding: 8px 0;
+            border-top: 1px solid #e0e0e0;
+        }
+        
+        .speed-label {
+            margin-right: 10px;
+            font-weight: bold;
+            color: #555;
+        }
+        
+        .speed-buttons {
+            display: flex;
+        }
+        
+        .speed-button {
+            background-color: #f0f0f0;
+            border: 1px solid #ccc;
+            color: #333;
+            padding: 5px 10px;
+            margin-right: 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .speed-button:hover {
+            background-color: #e0e0e0;
+        }
+        
+        .speed-button.active {
+            background-color: #2196F3;
+            color: white;
+            border-color: #1976D2;
+        }
+        
+        .visualization {
+            position: relative;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            overflow-x: auto;
+            background-color: white;
+        }
+        
+        .timeline {
+            position: relative;
+            height: 510px;  /* Adjusted height to accommodate strum events */
+        }
+        
+        .waveform {
+            height: 120px;
+            background-color: #f0f8ff;
+            position: relative;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .chord-display {
+            height: 250px;
+            position: relative;
+            background-color: #f9f9f9;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .strum-events {
+            height: 60px;
+            position: relative;
+            background-color: #edf7ff;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .sections-display {
+            height: 80px;
+            position: relative;
+            background-color: #fff8e6;
+        }
+        
+        .cursor {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            width: 2px;
+            background-color: red;
+            z-index: 10;
+            pointer-events: none;
+        }
+        
+        .chord-block {
+            position: absolute;
+            border-radius: 4px;
+            padding: 10px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            z-index: 2;
+            transition: transform 0.1s;
+        }
+        
+        .chord-block:hover {
+            transform: scale(1.02);
+            z-index: 3;
+        }
+        
+        .chord-block.CHORD {
+            background-color: #2196F3;
+            height: 120px;
+            top: 20px;
+        }
+        
+        .chord-block.NOTE {
+            background-color: #ff9800;
+            height: 80px;
+            top: 150px;
+        }
+        
+        .chord-label {
+            font-size: 24px;
+            margin-bottom: 8px;
+        }
+        
+        .chord-time {
+            font-size: 12px;
+            font-weight: normal;
+            opacity: 0.9;
+        }
+        
+        .section-block {
+            position: absolute;
+            height: 50px;
+            top: 15px;
+            background-color: rgba(255,193,7,0.2);
+            border: 1px solid #FFC107;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 10px;
+            font-size: 14px;
+            color: #5d4037;
+            text-align: center;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .beat-marker {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            width: 1px;
+            pointer-events: none;
+        }
+        
+        .beat-marker.measure {
+            background-color: rgba(0,0,0,0.2);
+        }
+        
+        .beat-marker.beat {
+            background-color: rgba(0,0,0,0.1);
+        }
+        
+        .measure-label {
+            position: absolute;
+            font-size: 11px;
+            color: #777;
+        }
+        
+        .time-label {
+            position: absolute;
+            font-size: 10px;
+            color: #777;
+            bottom: 2px;
+        }
+        
+        .strum-marker {
+            position: absolute;
+            width: 2px;
+            height: 40px;
+            bottom: 10px;
+            background-color: #3f51b5;
+            transform-origin: bottom center;
+            border-radius: 1px;
+            transition: transform 0.1s;
+        }
+        
+        .strum-marker:hover {
+            transform: scaleX(2);
+            background-color: #f44336;
+            z-index: 10;
+        }
+        
+        .info-panel {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e8f5e9;
+            border-radius: 8px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        
+        .legend {
+            display: flex;
+            margin-top: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 0 15px 10px 15px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            margin-right: 8px;
+        }
+        
+        .chord-color {
+            background-color: #2196F3;
+        }
+        
+        .note-color {
+            background-color: #ff9800;
+        }
+        
+        .section-color {
+            background-color: rgba(255,193,7,0.2);
+            border: 1px solid #FFC107;
+        }
+        
+        .strum-color {
+            width: 2px;
+            height: 20px;
+            background-color: #3f51b5;
+            margin-right: 8px;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                padding: 15px;
+            }
+            
+            .chord-label {
+                font-size: 18px;
+            }
+            
+            .timeline {
+                height: 460px;
+            }
+            
+            .waveform {
+                height: 100px;
+            }
+            
+            .chord-display {
+                height: 220px;
+            }
+            
+            .strum-events {
+                height: 40px;
+            }
+            
+            .sections-display {
+                height: 60px;
+            }
+            
+            .legend {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            
+            .legend-item {
+                margin: 5px 0;
+            }
+            
+            .speed-buttons {
+                flex-wrap: wrap;
+            }
+            
+            .speed-button {
+                margin-bottom: 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Guitar Chord Visualizer</h1>
+        
+        <div class="player-container">
+            <div class="controls">
+                <button id="playButton" class="play-button">▶ Play</button>
+                <div style="flex-grow: 1; margin: 0 10px;">
+                    <input type="range" id="seekBar" class="seekbar" min="0" max="100" value="0">
+                </div>
+                <span id="timeDisplay" class="time-display">0:00 / 0:00</span>
+            </div>
+            
+            <!-- Speed control section -->
+            <div class="speed-control">
+                <span class="speed-label">Playback Speed:</span>
+                <div class="speed-buttons">
+                    <button class="speed-button active" data-speed="1.0">100%</button>
+                    <button class="speed-button" data-speed="0.75">75%</button>
+                    <button class="speed-button" data-speed="0.5">50%</button>
+                    <button class="speed-button" data-speed="0.25">25%</button>
+                </div>
+            </div>
+            
+            <audio id="audioPlayer"></audio>
+        </div>
+        
+        <div class="visualization">
+            <div class="timeline">
+                <div class="waveform" id="waveform"></div>
+                <div class="chord-display" id="chordDisplay"></div>
+                <div class="strum-events" id="strumEvents"></div>
+                <div class="sections-display" id="sectionsDisplay"></div>
+                <div class="cursor" id="cursor"></div>
+            </div>
+        </div>
+        
+        <div class="legend">
+            <div class="legend-item">
+                <div class="legend-color chord-color"></div>
+                <span>Chords</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color note-color"></div>
+                <span>Notes</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color section-color"></div>
+                <span>Sections</span>
+            </div>
+            <div class="legend-item">
+                <div class="strum-color"></div>
+                <span>Detected Strums</span>
+            </div>
+        </div>
+        
+        <div class="info-panel" id="infoPanel">
+            <p><strong>How to use:</strong> Play the audio and follow along with the highlighted chords. The red line shows your current position. You can click anywhere on the timeline to jump to that position.</p>
+            <p><strong>Speed Control:</strong> Adjust the playback speed to practice at a slower tempo as you learn.</p>
+            <p><strong>Tempo:</strong> <span id="tempoDisplay">120 BPM</span></p>
+        </div>
+    </div>
+    
+    <script>
+        // Global variables
+        let audioPlayer;
+        let playButton;
+        let seekBar;
+        let timeDisplay;
+        let cursor;
+        let speedButtons;
+        let currentSpeed = 1.0;  // Default to 100% speed
+        let isPlaying = false;
+        let data;
+        let pixelsPerSecond = 100;  // Scale for visualization
+        
+        // Format time as MM:SS
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+        
+        // Initialize visualization
+        window.addEventListener('DOMContentLoaded', () => {
+            // Get DOM elements
+            audioPlayer = document.getElementById('audioPlayer');
+            playButton = document.getElementById('playButton');
+            seekBar = document.getElementById('seekBar');
+            timeDisplay = document.getElementById('timeDisplay');
+            cursor = document.getElementById('cursor');
+            speedButtons = document.querySelectorAll('.speed-button');
+            
+            // Set audio source
+            audioPlayer.src = '/audio';
+            audioPlayer.addEventListener('loadedmetadata', () => {
+                seekBar.max = audioPlayer.duration;
+                timeDisplay.textContent = `0:00 / ${formatTime(audioPlayer.duration)}`;
+            });
+            
+            // Play/pause button
+            playButton.addEventListener('click', () => {
+                if (audioPlayer.paused) {
+                    audioPlayer.play();
+                    playButton.textContent = '❚❚ Pause';
+                } else {
+                    audioPlayer.pause();
+                    playButton.textContent = '▶ Play';
+                }
+            });
+            
+            // Seek bar
+            seekBar.addEventListener('input', () => {
+                const seekTime = parseFloat(seekBar.value);
+                audioPlayer.currentTime = seekTime;
+                updateCursor(seekTime);
+                timeDisplay.textContent = `${formatTime(seekTime)} / ${formatTime(audioPlayer.duration)}`;
+            });
+            
+            // Update cursor and time during playback
+            audioPlayer.addEventListener('timeupdate', () => {
+                seekBar.value = audioPlayer.currentTime;
+                timeDisplay.textContent = `${formatTime(audioPlayer.currentTime)} / ${formatTime(audioPlayer.duration)}`;
+                updateCursor(audioPlayer.currentTime);
+            });
+            
+            // End of audio
+            audioPlayer.addEventListener('ended', () => {
+                playButton.textContent = '▶ Play';
+                isPlaying = false;
+            });
+            
+            // Speed control buttons
+            speedButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    // Remove active class from all buttons
+                    speedButtons.forEach(btn => btn.classList.remove('active'));
+                    
+                    // Add active class to clicked button
+                    this.classList.add('active');
+                    
+                    // Set playback speed
+                    currentSpeed = parseFloat(this.getAttribute('data-speed'));
+                    audioPlayer.playbackRate = currentSpeed;
+                    
+                    // Update tempo display if playing at different speed
+                    if (data && data.tempo) {
+                        const adjustedTempo = Math.round(data.tempo * currentSpeed);
+                        document.getElementById('tempoDisplay').textContent = `${adjustedTempo} BPM (${currentSpeed * 100}% speed)`;
+                    }
+                });
+            });
+            
+            // Click on visualization to seek
+            document.querySelectorAll('.waveform, .chord-display, .strum-events, .sections-display').forEach(el => {
+                el.addEventListener('click', (e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const clickX = e.clientX - rect.left + e.currentTarget.scrollLeft;
+                    const time = clickX / pixelsPerSecond;
+                    
+                    if (time >= 0 && time <= audioPlayer.duration) {
+                        audioPlayer.currentTime = time;
+                        updateCursor(time);
+                    }
+                });
+            });
+            
+            // Load visualization data
+            fetch('/data')
+                .then(response => response.json())
+                .then(jsonData => {
+                    data = jsonData;
+                    
+                    // Set tempo display
+                    document.getElementById('tempoDisplay').textContent = `${Math.round(data.tempo)} BPM`;
+                    
+                    // Add time signature information if available
+                    if (data.time_signature) {
+                        document.getElementById('infoPanel').innerHTML += `
+                            <p><strong>Time Signature:</strong> ${data.time_signature.numerator}/${data.time_signature.denominator} 
+                            (${data.time_signature.description})</p>
+                        `;
+                    }
+                    
+                    // Draw the visualization
+                    drawVisualization();
+                })
+                .catch(error => console.error('Error loading data:', error));
+        });
+        
+        // Update cursor position
+        function updateCursor(time) {
+            const position = time * pixelsPerSecond;
+            cursor.style.left = `${position}px`;
+            
+            // Auto-scroll if needed
+            const timeline = document.querySelector('.visualization');
+            if (position > timeline.scrollLeft + timeline.clientWidth - 100) {
+                timeline.scrollLeft = position - timeline.clientWidth + 100;
+            } else if (position < timeline.scrollLeft + 100) {
+                timeline.scrollLeft = position - 100;
+            }
+            
+            // Highlight current chord
+            document.querySelectorAll('.chord-block').forEach(block => {
+                const start = parseFloat(block.dataset.start);
+                const end = parseFloat(block.dataset.end);
+                
+                if (time >= start && time < end) {
+                    block.style.transform = 'scale(1.05)';
+                    block.style.zIndex = '5';
+                    block.style.boxShadow = '0 4px 8px rgba(0,0,0,0.3)';
+                } else {
+                    block.style.transform = '';
+                    block.style.zIndex = '2';
+                    block.style.boxShadow = '';
+                }
+            });
+            
+            // Highlight current strum
+            document.querySelectorAll('.strum-marker').forEach(marker => {
+                const markerTime = parseFloat(marker.dataset.time);
+                // Highlight strums within 0.1 second of current time
+                if (Math.abs(time - markerTime) < 0.1) {
+                    marker.style.transform = 'scaleX(2)';
+                    marker.style.backgroundColor = '#f44336';
+                    marker.style.zIndex = '5';
+                } else {
+                    marker.style.transform = '';
+                    marker.style.backgroundColor = '';
+                    marker.style.zIndex = '2';
+                }
+            });
+        }
+        
+        // Draw the entire visualization
+        function drawVisualization() {
+            const waveformContainer = document.getElementById('waveform');
+            const chordContainer = document.getElementById('chordDisplay');
+            const strumContainer = document.getElementById('strumEvents');
+            const sectionsContainer = document.getElementById('sectionsDisplay');
+            
+            // Set timeline width based on audio duration
+            const timelineWidth = data.duration * pixelsPerSecond;
+            waveformContainer.style.width = `${timelineWidth}px`;
+            chordContainer.style.width = `${timelineWidth}px`;
+            strumContainer.style.width = `${timelineWidth}px`;
+            sectionsContainer.style.width = `${timelineWidth}px`;
+            
+            // Draw beat markers and measures
+            drawBeatMarkers();
+            
+            // Draw waveform
+            drawWaveform();
+            
+            // Draw chord blocks
+            drawChordBlocks();
+            
+            // Draw detected strums
+            drawDetectedStrums();
+            
+            // Draw sections
+            drawSections();
+        }
+        
+        // Draw beat markers based on tempo and time signature
+        function drawBeatMarkers() {
+            const timeline = document.querySelector('.timeline');
+            const beatInterval = 60 / data.tempo; // seconds per beat
+            const beatsPerBar = data.time_signature ? data.time_signature.numerator : 4;
+            
+            // Add beat markers
+            for (let time = 0; time <= data.duration; time += beatInterval) {
+                // Determine if this is the start of a measure
+                const beatNumber = Math.round(time / beatInterval);
+                const isMeasureStart = beatNumber % beatsPerBar === 0;
+                
+                // Create marker element
+                const marker = document.createElement('div');
+                marker.className = `beat-marker ${isMeasureStart ? 'measure' : 'beat'}`;
+                marker.style.left = `${time * pixelsPerSecond}px`;
+                timeline.appendChild(marker);
+                
+                // Add measure number for measure starts
+                if (isMeasureStart) {
+                    const measureNum = Math.floor(beatNumber / beatsPerBar) + 1;
+                    
+                    // Add to waveform
+                    const waveLabel = document.createElement('div');
+                    waveLabel.className = 'measure-label';
+                    waveLabel.textContent = measureNum;
+                    waveLabel.style.left = `${time * pixelsPerSecond + 2}px`;
+                    waveLabel.style.top = '2px';
+                    document.getElementById('waveform').appendChild(waveLabel);
+                    
+                    // Add time labels every 4 measures
+                    if (measureNum % 4 === 0) {
+                        const timeLabel = document.createElement('div');
+                        timeLabel.className = 'time-label';
+                        timeLabel.textContent = formatTime(time);
+                        timeLabel.style.left = `${time * pixelsPerSecond - 10}px`;
+                        document.getElementById('waveform').appendChild(timeLabel);
+                    }
+                }
+            }
+        }
+        
+        // Draw waveform visualization
+        function drawWaveform() {
+            const canvas = document.createElement('canvas');
+            const container = document.getElementById('waveform');
+            const width = data.duration * pixelsPerSecond;
+            const height = container.clientHeight;
+            
+            canvas.width = width;
+            canvas.height = height;
+            container.appendChild(canvas);
+            
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, width, height);
+            
+            // Draw waveform
+            const amplitudes = data.waveform.amplitudes;
+            const times = data.waveform.times;
+            
+            // Find min and max for scaling
+            const minAmp = Math.min(...amplitudes);
+            const maxAmp = Math.max(...amplitudes);
+            const range = maxAmp - minAmp;
+            
+            // Draw the waveform line
+            ctx.beginPath();
+            ctx.strokeStyle = 'steelblue';
+            ctx.lineWidth = 1.5;
+            
+            for (let i = 0; i < times.length; i++) {
+                const x = times[i] * pixelsPerSecond;
+                // Scale amplitude to fit in container height with padding
+                const y = height - ((amplitudes[i] - minAmp) / range * (height - 20) + 10);
+                
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            
+            ctx.stroke();
+        }
+        
+        // Draw chord blocks
+        function drawChordBlocks() {
+            const container = document.getElementById('chordDisplay');
+            
+            data.chord_blocks.forEach(block => {
+                const element = document.createElement('div');
+                element.className = `chord-block ${block.kind}`;
+                element.style.left = `${block.start * pixelsPerSecond}px`;
+                element.style.width = `${(block.end - block.start) * pixelsPerSecond - 4}px`;
+                
+                // Store timing data for highlighting
+                element.dataset.start = block.start;
+                element.dataset.end = block.end;
+                
+                // Create label and time display
+                const labelDiv = document.createElement('div');
+                labelDiv.className = 'chord-label';
+                labelDiv.textContent = block.label;
+                
+                const timeDiv = document.createElement('div');
+                timeDiv.className = 'chord-time';
+                timeDiv.textContent = `${formatTime(block.start)} - ${formatTime(block.end)}`;
+                
+                element.appendChild(labelDiv);
+                element.appendChild(timeDiv);
+                container.appendChild(element);
+            });
+        }
+        
+        // Draw detected strums from audio
+        function drawDetectedStrums() {
+            const container = document.getElementById('strumEvents');
+            
+            // Check if detected strums data exists
+            if (!data.detected_strums || !Array.isArray(data.detected_strums)) {
+                console.warn('No detected strum events found');
+                return;
+            }
+            
+            // Create a marker for each detected strum
+            data.detected_strums.forEach(strum => {
+                const marker = document.createElement('div');
+                marker.className = 'strum-marker';
+                
+                // Position marker at the time point
+                marker.style.left = `${strum.time * pixelsPerSecond}px`;
+                
+                // Scale height based on intensity (40% to 100% of height)
+                const heightPercent = 40 + (strum.intensity * 60);
+                marker.style.height = `${heightPercent}%`;
+                
+                // Store time data for highlighting
+                marker.dataset.time = strum.time;
+                
+                // Add tooltip with timing information
+                marker.title = `Strum at ${formatTime(strum.time)}`;
+                
+                container.appendChild(marker);
+            });
+        }
+        
+        // Draw section blocks
+        function drawSections() {
+            const container = document.getElementById('sectionsDisplay');
+            
+            if (!data.sections || !Array.isArray(data.sections) || data.sections.length === 0) {
+                console.warn('No section data found');
+                return;
+            }
+            
+            data.sections.forEach(section => {
+                const element = document.createElement('div');
+                element.className = 'section-block';
+                element.style.left = `${section.start * pixelsPerSecond}px`;
+                element.style.width = `${(section.end - section.start) * pixelsPerSecond - 4}px`;
+                
+                // Add section information
+                element.innerHTML = `
+                    Section ${section.start_bar}-${section.end_bar}<br>
+                    <small>${Array.isArray(section.chords) ? section.chords.join(', ') : section.chords}</small>
+                `;
+                
+                container.appendChild(element);
+            });
+        }
+    </script>
+</body>
+</html>
