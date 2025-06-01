@@ -55,53 +55,122 @@ def prepare_data(data_path, audio_path):
             'intensity': float(strum_intensities[i]) if i < len(strum_intensities) else 0.5
         })
     
-    # Create chord blocks (combining consecutive similar chords)
+    # Process chord timeline data (use direct chords_timeline if available)
     chord_blocks = []
-    current_chord = None
-    start_time = 0
+    if 'chords_timeline' in data:
+        for item in data['chords_timeline']:
+            chord_blocks.append({
+                'label': item['label'],
+                'kind': 'CHORD',  # All items in chords_timeline are chords
+                'start': float(item['start']),
+                'end': float(item['end'])
+            })
+    else:
+        # Fallback to original method if chords_timeline not available
+        current_chord = None
+        start_time = 0
+        
+        for i, row in df_strums.iterrows():
+            if current_chord is None or row['label'] != current_chord or (i > 0 and row['time'] - df_strums.iloc[i-1]['time'] > 2.0):
+                if current_chord is not None:
+                    # Add previous block
+                    end_time = row['time']
+                    chord_blocks.append({
+                        'label': current_chord,
+                        'kind': df_strums.iloc[i-1]['kind'],
+                        'start': start_time,
+                        'end': end_time
+                    })
+                # Start new block
+                current_chord = row['label']
+                start_time = row['time']
+        
+        # Add the final block
+        if current_chord is not None and len(df_strums) > 0:
+            chord_blocks.append({
+                'label': current_chord,
+                'kind': df_strums.iloc[-1]['kind'],
+                'start': start_time,
+                'end': duration
+            })
     
-    for i, row in df_strums.iterrows():
-        if current_chord is None or row['label'] != current_chord or (i > 0 and row['time'] - df_strums.iloc[i-1]['time'] > 2.0):
-            if current_chord is not None:
-                # Add previous block
-                end_time = row['time']
-                chord_blocks.append({
-                    'label': current_chord,
-                    'kind': df_strums.iloc[i-1]['kind'],
-                    'start': start_time,
-                    'end': end_time
-                })
-            # Start new block
-            current_chord = row['label']
-            start_time = row['time']
-    
-    # Add the final block
-    if current_chord is not None and len(df_strums) > 0:
-        chord_blocks.append({
-            'label': current_chord,
-            'kind': df_strums.iloc[-1]['kind'],
-            'start': start_time,
-            'end': duration
-        })
+    # Process individual notes timeline if available
+    note_events = []
+    if 'notes_timeline' in data:
+        df_notes = pd.DataFrame(data['notes_timeline'])
+        
+        # Group consecutive identical notes
+        current_note = None
+        start_time = 0
+        
+        for i, row in df_notes.iterrows():
+            if current_note is None or row['note'] != current_note or (i > 0 and float(row['time']) - float(df_notes.iloc[i-1]['time']) > 0.1):
+                if current_note is not None:
+                    # Add previous note block
+                    end_time = float(row['time'])
+                    note_events.append({
+                        'label': current_note,
+                        'kind': 'NOTE',
+                        'start': start_time,
+                        'end': end_time
+                    })
+                # Start new note
+                current_note = row['note']
+                start_time = float(row['time'])
+                
+        # Add the final note
+        if current_note is not None and len(df_notes) > 0:
+            note_events.append({
+                'label': current_note,
+                'kind': 'NOTE',
+                'start': start_time,
+                'end': min(start_time + 0.2, duration)  # Assume note lasts at most 0.2s if it's the last one
+            })
     
     # Process sections data
     sections = []
-    if 'sections' in data:
-        df_sections = pd.DataFrame(data['sections'])
+    if 'bars' in data:
+        df_bars = pd.DataFrame(data['bars']) if isinstance(data['bars'], list) else data['bars']
         # Calculate approximate times from bar numbers
         sec_per_beat = 60 / tempo
         sec_per_bar = sec_per_beat * 4  # Assuming 4/4 time
         
-        for _, section in df_sections.iterrows():
-            start_time = (section['start_bar'] - 1) * sec_per_bar
-            end_time = section['end_bar'] * sec_per_bar
+        start_bar = 1
+        current_chords = None
+        
+        for i, row in df_bars.iterrows():
+            bar_num = row['bar']
+            chords = row['chords']
             
+            # Convert chords to string for comparison if it's a list
+            chords_str = ", ".join(chords) if isinstance(chords, list) else str(chords)
+            
+            if current_chords is None:
+                current_chords = chords_str
+            elif chords_str != current_chords:
+                # End previous section
+                end_bar = bar_num - 1
+                
+                sections.append({
+                    'start': (start_bar - 1) * sec_per_bar,
+                    'end': end_bar * sec_per_bar,
+                    'start_bar': start_bar,
+                    'end_bar': end_bar,
+                    'chords': current_chords
+                })
+                
+                # Start new section
+                start_bar = bar_num
+                current_chords = chords_str
+        
+        # Add the final section
+        if current_chords is not None:
             sections.append({
-                'start': start_time,
-                'end': end_time,
-                'start_bar': section['start_bar'],
-                'end_bar': section['end_bar'],
-                'chords': section['chords']
+                'start': (start_bar - 1) * sec_per_bar,
+                'end': len(df_bars) * sec_per_bar,
+                'start_bar': start_bar,
+                'end_bar': len(df_bars),
+                'chords': current_chords
             })
     
     # Detect time signature
@@ -109,8 +178,10 @@ def prepare_data(data_path, audio_path):
     
     return {
         'chord_blocks': chord_blocks,
+        'note_events': note_events,
         'sections': sections,
         'detected_strums': detected_strums,  # Audio-detected strums
+        'strum_data': df_strums.to_dict('records'),  # Include original strum data
         'tempo': tempo,
         'time_signature': time_signature,
         'waveform': {
@@ -161,8 +232,8 @@ def get_audio():
 
 if __name__ == '__main__':
     # Configuration - update these paths
-    data_path = 'testing/outputs/JeffBuckley-LoverYouShouldveComeOverAudio/guitar_data.json'  
-    audio_path = 'testing/outputs/JeffBuckley-LoverYouShouldveComeOverAudio/stage2_guitar_enhanced_cut.wav'
+    data_path = 'testing/outputs/FontainesD.C.-BugOfficialVideo/guitar_data.json'  
+    audio_path = 'testing/outputs/FontainesD.C.-BugOfficialVideo/stage2_guitar_enhanced_cut.wav'
     
     # Prepare the visualization data
     visualization_data = prepare_data(data_path, audio_path)
@@ -171,4 +242,4 @@ if __name__ == '__main__':
     os.makedirs('static', exist_ok=True)
     
     # Run the app
-    app.run(debug=True) 
+    app.run(debug=True)
