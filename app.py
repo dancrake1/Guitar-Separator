@@ -1,12 +1,22 @@
-from flask import Flask, render_template, jsonify, send_file
+from flask import Flask, render_template, jsonify, send_file, request, redirect, url_for, abort, Response, stream_with_context
 import numpy as np
 import pandas as pd
 import librosa
+import subprocess
+import sys
+import uuid
+import torchaudio
+from werkzeug.utils import secure_filename
 import json
 import os
 
 # Flask app for serving the visualization
 app = Flask(__name__, static_folder='static')
+
+# Globals to hold current processing state
+visualization_data = None
+guitar_audio_path = None
+original_audio_path = None
 
 # Load and process data with strum detection from audio
 def prepare_data(data_path, audio_path):
@@ -222,24 +232,165 @@ def detect_time_signature(data):
 def index():
     return render_template('index.html')
 
+
+@app.route('/process', methods=['POST'])
+def process():
+    """Handle uploaded audio, run separation/analysis pipeline, and prepare data for visualization."""
+    global visualization_data, guitar_audio_path, original_audio_path
+    # Validate upload
+    uploaded = request.files.get('audio_file')
+    if not uploaded:
+        abort(400, 'No audio file uploaded')
+    # Parse form fields
+    mode = request.form.get('mode', 'full')
+    try:
+        start_sec = float(request.form.get('start_sec', 0) or 0)
+    except ValueError:
+        start_sec = 0.0
+    end_val = request.form.get('end_sec')
+    try:
+        end_sec = float(end_val) if end_val else None
+    except ValueError:
+        end_sec = None
+
+    # Create unique session folder under static/uploads
+    session_id = uuid.uuid4().hex
+    base_dir = os.path.join(app.static_folder, 'uploads', session_id)
+    os.makedirs(base_dir, exist_ok=True)
+
+    # Save uploaded file
+    filename = secure_filename(uploaded.filename)
+    input_path = os.path.join(base_dir, filename)
+    uploaded.save(input_path)
+
+    # Run separation+analysis script
+    script_path = os.path.join(os.path.dirname(__file__), 'testing', 'testing_split.py')
+    # Build command for external processing script
+    cmd = [sys.executable, script_path, input_path,
+           '--start-sec', str(start_sec),
+           '--output-dir', base_dir]
+    if end_sec is not None:
+        cmd.extend(['--end-sec', str(end_sec)])
+    # Execute external processing script
+    subprocess.run(cmd, check=True)
+
+    # Determine song_name directory
+    song_name = os.path.splitext(os.path.basename(input_path))[0].replace('_', '')
+    subdir = os.path.join(base_dir, song_name)
+
+    # Paths to generated files
+    data_json = os.path.join(subdir, 'guitar_data.json')
+    guitar_file = os.path.join(subdir, 'stage2_guitar_enhanced_cut.wav')
+
+    # Trim original if requested
+    if mode == 'trimmed':
+        # Trim the uploaded original audio
+        waveform, sr = torchaudio.load(input_path)
+        start_sample = int(start_sec * sr)
+        end_sample = int(end_sec * sr) if end_sec is not None else waveform.shape[1]
+        trimmed_waveform = waveform[:, start_sample:end_sample]
+        orig_out = os.path.join(subdir, 'original_trimmed.wav')
+        torchaudio.save(orig_out, trimmed_waveform, sr)
+        original_file = orig_out
+    else:
+        original_file = input_path
+
+    # Prepare visualization data
+    visualization_data = prepare_data(data_json, guitar_file)
+    guitar_audio_path = guitar_file
+    original_audio_path = original_file
+
+    return redirect(url_for('index'))
+
+@app.route('/process_stream', methods=['POST'])
+def process_stream():
+    """Stream processing steps for uploaded audio via server-sent progress."""
+    global visualization_data, guitar_audio_path, original_audio_path
+
+    def generate():
+        uploaded = request.files.get('audio_file')
+        if not uploaded:
+            yield "Error: no audio file uploaded\n"
+            return
+        mode = request.form.get('mode', "full")
+        try:
+            start_sec = float(request.form.get("start_sec", 0) or 0)
+        except ValueError:
+            start_sec = 0.0
+        end_val = request.form.get("end_sec")
+        try:
+            end_sec = float(end_val) if end_val else None
+        except ValueError:
+            end_sec = None
+
+        yield f"Saving upload ({uploaded.filename})...\n"
+        session_id = uuid.uuid4().hex
+        base_dir = os.path.join(app.static_folder, "uploads", session_id)
+        os.makedirs(base_dir, exist_ok=True)
+        filename = secure_filename(uploaded.filename)
+        input_path = os.path.join(base_dir, filename)
+        uploaded.save(input_path)
+        yield f"Uploaded to {input_path}\n"
+
+        yield "Running separation and analysis...\n"
+        script_path = os.path.join(os.path.dirname(__file__), "testing", "testing_split.py")
+        cmd = [sys.executable, script_path, input_path, "--start-sec", str(start_sec), "--output-dir", base_dir]
+        if end_sec is not None:
+            cmd.extend(["--end-sec", str(end_sec)])
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        for line in proc.stdout or []:
+            yield line
+        proc.wait()
+        if proc.returncode != 0:
+            yield f"Error: processing script failed with code {proc.returncode}\n"
+            return
+        yield "Separation and analysis complete.\n"
+
+        song_name = os.path.splitext(os.path.basename(input_path))[0].replace("_", "")
+        subdir = os.path.join(base_dir, song_name)
+        data_json = os.path.join(subdir, "guitar_data.json")
+        guitar_file = os.path.join(subdir, "stage2_guitar_enhanced_cut.wav")
+
+        if mode == "trimmed":
+            yield "Trimming original audio...\n"
+            waveform, sr = torchaudio.load(input_path)
+            start_sample = int(start_sec * sr)
+            end_sample = int(end_sec * sr) if end_sec is not None else waveform.shape[1]
+            trimmed_waveform = waveform[:, start_sample:end_sample]
+            orig_out = os.path.join(subdir, "original_trimmed.wav")
+            torchaudio.save(orig_out, trimmed_waveform, sr)
+            original_file = orig_out
+            yield "Original audio trimmed.\n"
+        else:
+            yield "Keeping full original audio.\n"
+            original_file = input_path
+
+        yield "Preparing visualization data...\n"
+        visualization_data = prepare_data(data_json, guitar_file)
+        guitar_audio_path = guitar_file
+        original_audio_path = original_file
+        yield "Done processing.\n"
+
+    return Response(stream_with_context(generate()), mimetype="text/plain")
+
 @app.route('/data')
 def get_data():
+    if visualization_data is None:
+        return jsonify({})
     return jsonify(visualization_data)
 
 @app.route('/audio')
 def get_audio():
-    return send_file(audio_path, mimetype='audio/wav')
+    if not guitar_audio_path or not original_audio_path:
+        abort(404)
+    track = request.args.get('track', 'guitar')
+    if track == 'original':
+        path = original_audio_path
+    else:
+        path = guitar_audio_path
+    return send_file(path, mimetype='audio/wav')
 
 if __name__ == '__main__':
-    # Configuration - update these paths
-    data_path = 'testing/outputs/FontainesD.C.-BugOfficialVideo/guitar_data.json'  
-    audio_path = 'testing/outputs/FontainesD.C.-BugOfficialVideo/stage2_guitar_enhanced_cut.wav'
-    
-    # Prepare the visualization data
-    visualization_data = prepare_data(data_path, audio_path)
-    
-    # Create static folder if it doesn't exist
-    os.makedirs('static', exist_ok=True)
-    
-    # Run the app
+    # Ensure uploads directory exists
+    os.makedirs(os.path.join(app.static_folder, 'uploads'), exist_ok=True)
     app.run(debug=True)

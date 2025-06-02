@@ -391,8 +391,35 @@
 <body>
     <div class="container">
         <h1>Guitar Chord Visualizer</h1>
-        
-        <div class="player-container">
+
+        <form id="uploadForm" action="/process" method="post" enctype="multipart/form-data" style="margin-bottom:20px;">
+            <label>Choose Audio File:
+                <input type="file" name="audio_file" accept="audio/*" required>
+            </label>
+            <label style="margin-left:20px;">Mode:
+                <select name="mode" id="modeSelect">
+                    <option value="full">Full Song</option>
+                    <option value="trimmed">Trimmed Segment</option>
+                </select>
+            </label>
+            <span id="trimInputs" style="display:none; margin-left:20px;">
+                <label>Start (sec): <input type="number" name="start_sec" id="startInput" min="0" step="0.1" value="0"></label>
+                <label style="margin-left:10px;">End (sec): <input type="number" name="end_sec" id="endInput" min="0" step="0.1"></label>
+            </span>
+            <button type="submit" style="margin-left:20px;">Process</button>
+        </form>
+
+        <div id="progressContainer" style="display:none; margin-bottom:20px;">
+            <h3>Processing Steps:</h3>
+            <ul id="progressList" style="list-style:none; padding-left:0; margin:0;"></ul>
+        </div>
+
+        <div id="result" style="display:none;">
+            <div class="track-selector" style="margin-bottom:10px;">
+                <label><input type="radio" name="track" value="guitar" checked> Guitar</label>
+                <label style="margin-left:20px;"><input type="radio" name="track" value="original"> Original</label>
+            </div>
+            <div class="player-container">
             <div class="controls">
                 <button id="playButton" class="play-button">▶ Play</button>
                 <div style="flex-grow: 1; margin: 0 10px;">
@@ -452,9 +479,10 @@
             <p><strong>How to use:</strong> Play the audio and follow along with the highlighted chords. The red line shows your current position. You can click anywhere on the timeline to jump to that position.</p>
             <p><strong>Speed Control:</strong> Adjust the playback speed to practice at a slower tempo as you learn.</p>
             <p><strong>Tempo:</strong> <span id="tempoDisplay">120 BPM</span></p>
-        </div>
-    </div>
-    
+        </div> <!-- end of info-panel -->
+        </div> <!-- end of result -->
+    </div> <!-- end of container -->
+
     <script>
         // Global variables
         let audioPlayer;
@@ -477,6 +505,41 @@
         
         // Initialize visualization
         window.addEventListener('DOMContentLoaded', () => {
+            // Progress streaming for processing steps
+            const uploadForm = document.getElementById('uploadForm');
+            const progressContainer = document.getElementById('progressContainer');
+            const progressList = document.getElementById('progressList');
+            uploadForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                progressList.innerHTML = '';
+                progressContainer.style.display = 'block';
+                document.getElementById('result').style.display = 'none';
+                const formData = new FormData(uploadForm);
+                fetch('/process_stream', { method: 'POST', body: formData })
+                    .then(response => {
+                        const reader = response.body.getReader();
+                        const decoder = new TextDecoder();
+                        function read() {
+                            reader.read().then(({ done, value }) => {
+                                if (done) {
+                                    startDataFetch();
+                                    return;
+                                }
+                                const chunk = decoder.decode(value, { stream: true });
+                                chunk.split(/\r?\n/).forEach(line => {
+                                    if (line.trim()) {
+                                        const li = document.createElement('li');
+                                        li.textContent = line;
+                                        progressList.appendChild(li);
+                                    }
+                                });
+                                read();
+                            });
+                        }
+                        read();
+                    })
+                .catch(err => console.error('Processing error:', err));
+            });
             // Get DOM elements
             audioPlayer = document.getElementById('audioPlayer');
             playButton = document.getElementById('playButton');
@@ -485,7 +548,18 @@
             cursor = document.getElementById('cursor');
             speedButtons = document.querySelectorAll('.speed-button');
             
-            // Set audio source
+            // Handle trim inputs visibility based on mode selection
+            const modeSelect = document.getElementById('modeSelect');
+            const trimInputs = document.getElementById('trimInputs');
+            modeSelect.addEventListener('change', () => {
+                if (modeSelect.value === 'trimmed') {
+                    trimInputs.style.display = 'inline';
+                } else {
+                    trimInputs.style.display = 'none';
+                }
+            });
+
+            // Set audio source to guitar by default
             audioPlayer.src = '/audio';
             audioPlayer.addEventListener('loadedmetadata', () => {
                 seekBar.max = audioPlayer.duration;
@@ -545,6 +619,14 @@
                 });
             });
             
+            // Track selector change -> switch audio source
+            document.querySelectorAll('input[name="track"]').forEach(radio => {
+                radio.addEventListener('change', () => {
+                    audioPlayer.src = '/audio?track=' + radio.value;
+                    audioPlayer.load();
+                });
+            });
+
             // Click on visualization to seek
             document.querySelectorAll('.waveform, .chord-display, .strum-events, .sections-display').forEach(el => {
                 el.addEventListener('click', (e) => {
@@ -559,27 +641,25 @@
                 });
             });
             
-            // Load visualization data
-            fetch('/data')
-                .then(response => response.json())
-                .then(jsonData => {
-                    data = jsonData;
-                    
-                    // Set tempo display
-                    document.getElementById('tempoDisplay').textContent = `${Math.round(data.tempo)} BPM`;
-                    
-                    // Add time signature information if available
-                    if (data.time_signature) {
-                        document.getElementById('infoPanel').innerHTML += `
-                            <p><strong>Time Signature:</strong> ${data.time_signature.numerator}/${data.time_signature.denominator} 
-                            (${data.time_signature.description})</p>
-                        `;
-                    }
-                    
-                    // Draw the visualization
-                    drawVisualization();
-                })
-                .catch(error => console.error('Error loading data:', error));
+            // Function to fetch processed data and update visualization
+            function startDataFetch() {
+                fetch('/data')
+                    .then(response => response.json())
+                    .then(jsonData => {
+                        if (!jsonData || !jsonData.chord_blocks) return;
+                        data = jsonData;
+                        document.getElementById('uploadForm').style.display = 'none';
+                        document.getElementById('result').style.display = 'block';
+                        document.getElementById('tempoDisplay').textContent = `${Math.round(data.tempo)} BPM`;
+                        if (data.time_signature) {
+                            document.getElementById('infoPanel').innerHTML += `
+                                <p><strong>Time Signature:</strong> ${data.time_signature.numerator}/${data.time_signature.denominator}
+                                (${data.time_signature.description})</p>
+                            `;
+                        }
+                        drawVisualization();
+                    })
+                    .catch(error => console.error('Error loading data:', error));
         });
         
         // Update cursor position

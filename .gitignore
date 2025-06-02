@@ -1,2 +1,7 @@
 seperator.venv/
 testing/outputs
+
+# Ignore all mp3
+*.mp3
+*.MP3
+
