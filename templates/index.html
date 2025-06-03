@@ -338,6 +338,37 @@
         .null-color {
             background-color: #9e9e9e;
         }
+
+        /* Loading spinner and done icon for log steps */
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
+        }
+        .spinner {
+            border: 2px solid rgba(0, 0, 0, 0.1);
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            width: 12px;
+            height: 12px;
+            animation: spin 0.8s linear infinite;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        .done {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            margin-right: 8px;
+            vertical-align: middle;
+            color: #4CAF50;
+            font-size: 12px;
+            line-height: 12px;
+            text-align: center;
+        }
+        .done::after {
+            content: '✔';
+        }
         
         @media (max-width: 768px) {
             .container {
@@ -392,7 +423,7 @@
     <div class="container">
         <h1>Guitar Chord Visualizer</h1>
 
-        <form id="uploadForm" action="/process" method="post" enctype="multipart/form-data" style="margin-bottom:20px;">
+        <form id="uploadForm" action="/process" method="post" enctype="multipart/form-data" style="margin-bottom:20px;" onsubmit="event.preventDefault();">
             <label>Choose Audio File:
                 <input type="file" name="audio_file" accept="audio/*" required>
             </label>
@@ -410,8 +441,12 @@
         </form>
 
         <div id="progressContainer" style="display:none; margin-bottom:20px;">
-            <h3>Processing Steps:</h3>
-            <ul id="progressList" style="list-style:none; padding-left:0; margin:0;"></ul>
+        <h3>Processing Steps: <span id="mainSpinner" class="spinner"></span></h3>
+            <ul id="highLevelList" style="list-style:none; padding-left:0; margin:0;"></ul>
+            <details id="detailedLogs" style="margin-top:10px;">
+                <summary>Show Detailed Logs</summary>
+                <pre id="detailedList" style="white-space:pre-wrap; background:#f5f5f5; padding:10px; border:1px solid #ccc; max-height:200px; overflow:auto;"></pre>
+            </details>
         </div>
 
         <div id="result" style="display:none;">
@@ -508,11 +543,18 @@
             // Progress streaming for processing steps
             const uploadForm = document.getElementById('uploadForm');
             const progressContainer = document.getElementById('progressContainer');
-            const progressList = document.getElementById('progressList');
+            const highLevelList = document.getElementById('highLevelList');
+            const detailedList = document.getElementById('detailedList');
+            const highLevelPatterns = [
+                /^Saving upload/, /^Uploaded to/, /^Running separation and analysis/,
+                /^Loading audio/, /^STAGE/, /^Saved/, /complete/i, /processing/i
+            ];
             uploadForm.addEventListener('submit', function(e) {
                 e.preventDefault();
-                progressList.innerHTML = '';
+                highLevelList.innerHTML = '';
+                detailedList.textContent = '';
                 progressContainer.style.display = 'block';
+                document.getElementById('mainSpinner').style.display = 'inline-block';
                 document.getElementById('result').style.display = 'none';
                 const formData = new FormData(uploadForm);
                 fetch('/process_stream', { method: 'POST', body: formData })
@@ -522,15 +564,30 @@
                         function read() {
                             reader.read().then(({ done, value }) => {
                                 if (done) {
+                                    // mark last step done
+                                    const lastLi = highLevelList.lastElementChild;
+                                    if (lastLi) {
+                                        const sp = lastLi.querySelector('.spinner');
+                                        if (sp) sp.classList.replace('spinner', 'done');
+                                    }
                                     startDataFetch();
                                     return;
                                 }
                                 const chunk = decoder.decode(value, { stream: true });
                                 chunk.split(/\r?\n/).forEach(line => {
-                                    if (line.trim()) {
+                                    if (!line.trim()) return;
+                                    if (highLevelPatterns.some(p => p.test(line))) {
+                                        // mark previous step done
+                                        const prevLi = highLevelList.lastElementChild;
+                                        if (prevLi) {
+                                            const sp = prevLi.querySelector('.spinner');
+                                            if (sp) sp.classList.replace('spinner', 'done');
+                                        }
                                         const li = document.createElement('li');
-                                        li.textContent = line;
-                                        progressList.appendChild(li);
+                                        li.innerHTML = '<span class="spinner"></span>' + line;
+                                        highLevelList.appendChild(li);
+                                    } else {
+                                        detailedList.textContent += line + '\n';
                                     }
                                 });
                                 read();
@@ -563,7 +620,7 @@
             audioPlayer.src = '/audio';
             audioPlayer.addEventListener('loadedmetadata', () => {
                 seekBar.max = audioPlayer.duration;
-                timeDisplay.textContent = `0:00 / ${formatTime(audioPlayer.duration)}`;
+                timeDisplay.textContent = `${formatTime(audioPlayer.currentTime)} / ${formatTime(audioPlayer.duration)}`;
             });
             
             // Play/pause button
@@ -620,12 +677,22 @@
             });
             
             // Track selector change -> switch audio source
-            document.querySelectorAll('input[name="track"]').forEach(radio => {
-                radio.addEventListener('change', () => {
-                    audioPlayer.src = '/audio?track=' + radio.value;
-                    audioPlayer.load();
-                });
-            });
+document.querySelectorAll('input[name="track"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+        const wasPlaying = !audioPlayer.paused;
+        const currentTime = audioPlayer.currentTime;
+        audioPlayer.src = '/audio?track=' + radio.value;
+        audioPlayer.load();
+        audioPlayer.addEventListener('loadedmetadata', function seekOnLoad() {
+            audioPlayer.currentTime = currentTime;
+            if (wasPlaying) {
+                audioPlayer.play();
+                playButton.textContent = '❚❚ Pause';
+            }
+            audioPlayer.removeEventListener('loadedmetadata', seekOnLoad);
+        });
+    });
+});
 
             // Click on visualization to seek
             document.querySelectorAll('.waveform, .chord-display, .strum-events, .sections-display').forEach(el => {
@@ -650,16 +717,21 @@
                         data = jsonData;
                         document.getElementById('uploadForm').style.display = 'none';
                         document.getElementById('result').style.display = 'block';
+                        // Reload trimmed audio segment so original and guitar stay aligned
+                        const selectedTrack = document.querySelector('input[name="track"]:checked').value;
+                        audioPlayer.src = '/audio?track=' + selectedTrack;
+                        audioPlayer.load();
                         document.getElementById('tempoDisplay').textContent = `${Math.round(data.tempo)} BPM`;
                         if (data.time_signature) {
-                            document.getElementById('infoPanel').innerHTML += `
-                                <p><strong>Time Signature:</strong> ${data.time_signature.numerator}/${data.time_signature.denominator}
-                                (${data.time_signature.description})</p>
-                            `;
+                            document.getElementById('infoPanel').innerHTML += '<p><strong>Time Signature:</strong> ' +
+                                data.time_signature.numerator + '/' + data.time_signature.denominator +
+                                ' (' + data.time_signature.description + ')</p>';
                         }
                         drawVisualization();
+                        document.getElementById('mainSpinner').style.display = 'none';
                     })
                     .catch(error => console.error('Error loading data:', error));
+            }
         });
         
         // Update cursor position
@@ -944,10 +1016,8 @@
                 element.style.width = `${(section.end - section.start) * pixelsPerSecond - 4}px`;
                 
                 // Add section information
-                element.innerHTML = `
-                    Section ${section.start_bar}-${section.end_bar}<br>
-                    <small>${Array.isArray(section.chords) ? section.chords.join(', ') : section.chords}</small>
-                `;
+                element.innerHTML = 'Section ' + section.start_bar + '-' + section.end_bar +
+                    '<br><small>' + (Array.isArray(section.chords) ? section.chords.join(', ') : section.chords) + '</small>';
                 
                 container.appendChild(element);
             });

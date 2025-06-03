@@ -40,6 +40,13 @@ from demucs.apply import apply_model
 print(f"Loading audio from {song_path}...")
 sample_waveform, sample_rate = torchaudio.load(song_path)
 print(f"Loaded audio with shape {sample_waveform.shape} and sample rate {sample_rate}")
+# Trim input audio if requested
+if start_sec > 0 or end_sec is not None:
+    start_sample = int(start_sec * sample_rate)
+    end_sample = int(end_sec * sample_rate) if end_sec is not None else sample_waveform.shape[1]
+    print(f"Trimming input audio: {start_sec}s to {end_sec if end_sec is not None else 'end'} -> samples {start_sample}:{end_sample}")
+    sample_waveform = sample_waveform[:, start_sample:end_sample]
+    print(f"Trimmed audio shape: {sample_waveform.shape}")
 
 # Determine device
 if torch.cuda.is_available():
@@ -288,7 +295,7 @@ If you later add a CUDA PyTorch wheel, torchcrepe will use it automatically.
 """
 import warnings, traceback
 from dataclasses import dataclass, asdict
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 import numpy as np, librosa, pandas as pd, torch, torchaudio
 from pathlib import Path
@@ -374,7 +381,7 @@ def note_timeline(audio_path: str,
                   conf_thresh: float = .8,
                   peak_db: float = -52,
                   min_peaks: int = 4,
-                  device: str | None = None) -> pd.DataFrame:
+                  device: Optional[str] = None) -> pd.DataFrame:
     """
     Returns DF [time, note] containing ONLY intentionally plucked single‑string notes.
     Strategy:
@@ -570,10 +577,9 @@ def run_in_notebook(audio_path: str):
 # In[113]:
 
 
-audio_path = f'outputs/{song_name}/stage2_guitar_enhanced_cut.wav'
+audio_path = os.path.join(output_dir, song_name, 'stage2_guitar_enhanced_cut.wav')
 # data = run_in_notebook(audio_path)
 data = analyse_audio(audio_path, return_dataframes=True)
-return_dataframes = True
 
 
 # In[114]:
