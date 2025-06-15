@@ -1,0 +1,31 @@
+# Core dependencies
+torch==2.7.0
+torchvision
+torchaudio
+
+# Audio processing
+soundfile>=0.12,<1.0
+librosa
+numpy
+scipy
+tqdm
+matplotlib
+ffmpeg-python
+
+# Source separation
+demucs
+
+# Guitar analysis
+madmom
+torchcrepe
+pandas
+
+# Web framework
+Flask
+
+# Guitar transcription (install with --no-deps)
+# git+https://github.com/cwitkowitz/guitar-transcription-continuous
+# git+https://github.com/cwitkowitz/amt-tools
+
+# Development tools
+jupyterlab

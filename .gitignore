@@ -1,11 +1,80 @@
+# Virtual environments
 seperator.venv/
 seperator.venv2/
 seperator.env/
 seperator_env/
-testing/outputs
+venv/
+env/
 
-# Ignore all binary
+# Audio files
 *.mp3
 *.MP3
 *.wav
+*.flac
+*.m4a
+*.aac
+
+# Output directories and uploads
+testing/outputs/
+testing/Archive/
+testing/*.mp3
+testing/*.wav
+testing/ZachBryan-SomethingInTheOrange/
+testing/sample_input.wav
+testing/test_buckley.wav
+static/uploads/
+logs/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+test_run.log
+
+# Model checkpoints (keep structure but ignore large files)
+*.pt
+*.pth
+*.ckpt
+
+# Configs
+CLAUDE.md
+codex.md
 
