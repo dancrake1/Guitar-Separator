@@ -2,6 +2,8 @@
 
 A Flask web application that separates guitar tracks from audio files and provides real-time chord and note detection with interactive visualization.
 
+![alt text](image.png)
+
 ## Features
 
 - **Two-Stage AI Separation**: Advanced guitar isolation using Demucs models
@@ -111,14 +113,14 @@ Guitar-Separator/
 - **Demucs Models**: Meta's state-of-the-art source separation
   - `htdemucs_ft`: Fine-tuned hybrid transformer model
   - `htdemucs_6s`: 6-source separation model
-- **FretNet**: Guitar transcription and chord detection model
+- **FretNet**: Guitar transcription and chord detection model - In Progress
 
 ## Development
 
 ### Future Enhancements
 
 - Enhanced chord recognition and visualization
-- Guitar chord shape images and fingering diagrams
+- Guitar chord shape images and fingering diagrams - FretNet
 - Additional audio export formats
 - Batch processing capabilities
 
@@ -139,9 +141,6 @@ See `requirements.txt` for complete dependency list. Key libraries include:
 - Librosa (audio processing)
 - NumPy, SciPy (numerical computing)
 
-## License
-
-[Add your license information here]
 
 ## Acknowledgments
 
