@@ -1,4 +1,7 @@
 seperator.venv/
+seperator.venv2/
+seperator.env/
+seperator_env/
 testing/outputs
 
 # Ignore all binary

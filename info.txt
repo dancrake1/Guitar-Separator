@@ -1,0 +1,8 @@
+pip install -U pip wheel setuptools
+pip install torch==2.7.0 torchvision
+pip install "soundfile>=0.12,<1.0"
+CMAKE_PREFIX_PATH=$(brew --prefix ffmpeg@6) pip install --no-binary torchaudio torchaudio
+pip install librosa numpy scipy tqdm matplotlib jupyterlab ffmpeg-python demucs
+pip install madmom torchcrepe pandas
+pip install --no-deps git+https://github.com/cwitkowitz/guitar-transcription-continuous
+pip install --no-deps --upgrade git+https://github.com/cwitkowitz/amt-tools
