@@ -4,7 +4,7 @@ import logging
 
 
 from utils.file_utils import make_session_folder, save_uploaded_file, make_song_subfolder
-from utils.pipeline_utils import run_subprocess_pipeline
+from utils.audio_processor import process_audio_file
 from utils.trim_utils import trim_audio
 
 # Flask app for serving the visualization
@@ -45,8 +45,8 @@ def process():
     song_name = os.path.splitext(filename)[0].replace('_', '')
     subdir = make_song_subfolder(base_dir, song_name)
 
-    # Run the external separation & analysis pipeline
-    for _ in run_subprocess_pipeline(input_path, start_sec, end_sec, base_dir):
+    # Run the separation & analysis pipeline
+    for _ in process_audio_file(input_path, base_dir, start_sec, end_sec):
         pass
 
     # Paths to results
@@ -107,8 +107,9 @@ def process_stream():
 
         yield "Running separation and analysis...\n"
         logger.info("Running separation and analysis")
-        for line in run_subprocess_pipeline(input_path, start_sec, end_sec, base_dir):
-            yield line
+        for line in process_audio_file(input_path, base_dir, start_sec, end_sec):
+            yield f"{line}\n"
+            logger.info(line)
         yield "Separation and analysis complete.\n"
         logger.info("Separation and analysis complete.")
 

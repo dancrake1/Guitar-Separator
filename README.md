@@ -18,7 +18,7 @@ The application uses a sophisticated two-stage processing pipeline:
 
 1. **Stage 1**: Extract the 'other' stem using `htdemucs_ft` model
 2. **Stage 2**: Isolate and enhance guitar from the 'other' stem using `htdemucs_6s` model
-3. **Analysis**: Guitar transcription and chord detection using FretNet model
+3. **Analysis**: Basic tempo and onset detection (with placeholder for future FretNet integration)
 
 ## Installation
 
@@ -91,15 +91,12 @@ python app.py
 Guitar-Separator/
 ├── app.py                 # Flask application and routes
 ├── utils/                 # Core processing utilities
+│   ├── audio_processor.py # Main processing orchestrator
 │   ├── stage1_utils.py    # First-stage separation (htdemucs_ft)
 │   ├── stage2_utils.py    # Second-stage separation (htdemucs_6s)
 │   ├── analysis_utils.py  # Guitar analysis and visualization data
-│   ├── pipeline_utils.py  # Processing pipeline orchestration
 │   ├── file_utils.py      # File and session management
 │   └── trim_utils.py      # Audio trimming utilities
-├── testing/
-│   ├── testing_split.py   # Main audio processing pipeline script
-│   └── __init__.py        # Python package marker
 ├── templates/
 │   └── index.html         # Web interface
 ├── FretNet/

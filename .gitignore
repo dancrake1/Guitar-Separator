@@ -19,9 +19,6 @@ testing/outputs/
 testing/Archive/
 testing/*.mp3
 testing/*.wav
-testing/ZachBryan-SomethingInTheOrange/
-testing/sample_input.wav
-testing/test_buckley.wav
 static/uploads/
 logs/
 *.log
