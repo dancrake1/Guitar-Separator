@@ -12,7 +12,6 @@ from typing import Optional, Iterator, Tuple, Dict, Any
 from .stage1_utils import run_stage1
 from .stage2_utils import run_stage2
 from .analysis_utils import analyze_guitar_audio
-from .trim_utils import trim_audio
 from .file_utils import make_song_subfolder
 
 
@@ -63,12 +62,19 @@ class AudioProcessor:
             waveform, sample_rate = torchaudio.load(input_path)
             yield f"Loaded audio with shape {waveform.shape} and sample rate {sample_rate}"
             
+            # Store reference to potentially trimmed input for original audio alignment
+            trimmed_input_path = input_path
             if start_sec > 0 or end_sec is not None:
                 yield f"Trimming audio: {start_sec}s to {end_sec or 'end'}s"
                 start_sample = int(start_sec * sample_rate)
                 end_sample = int(end_sec * sample_rate) if end_sec is not None else waveform.shape[1]
                 waveform = waveform[:, start_sample:end_sample]
                 yield f"Trimmed audio shape: {waveform.shape}"
+                
+                # Save trimmed input for perfect original audio alignment
+                trimmed_input_path = os.path.join(song_dir, "input_trimmed.wav")
+                torchaudio.save(trimmed_input_path, waveform, sample_rate)
+                yield f"Saved trimmed input audio to {trimmed_input_path}"
             
             # Stage 1: Extract 'other' stem
             yield "STAGE 1: Separating with htdemucs_ft..."
@@ -94,18 +100,18 @@ class AudioProcessor:
             torchaudio.save(enhanced_file, enhanced_guitar, stage2_sr)
             yield f"Saved enhanced guitar to {enhanced_file}"
             
-            # Trim enhanced guitar to match requested time range
+            # Set up final output files - no additional trimming needed since we processed trimmed audio
+            import shutil
+            trimmed_file = os.path.join(song_dir, "stage2_guitar_enhanced_cut.wav")
+            shutil.copy2(enhanced_file, trimmed_file)
+            yield f"Using enhanced guitar as final output: {trimmed_file}"
+            
+            # Use the trimmed input (if trimming was requested) for perfect alignment
             if start_sec > 0 or end_sec is not None:
-                yield "Trimming enhanced guitar to match time range..."
-                trimmed_file = os.path.join(song_dir, "stage2_guitar_enhanced_cut.wav")
-                trim_audio(enhanced_file, start_sec, end_sec, trimmed_file)
-                yield f"Saved trimmed guitar to {trimmed_file}"
-            else:
-                # If no trimming, copy enhanced file as the "cut" version
-                import shutil
-                trimmed_file = os.path.join(song_dir, "stage2_guitar_enhanced_cut.wav")
-                shutil.copy2(enhanced_file, trimmed_file)
-                yield f"Using full enhanced guitar as final output: {trimmed_file}"
+                yield "Using pre-trimmed original audio for perfect alignment..."
+                original_trimmed = os.path.join(song_dir, "original_trimmed.wav")
+                shutil.copy2(trimmed_input_path, original_trimmed)
+                yield f"Aligned original audio saved to {original_trimmed}"
             
             # Guitar analysis
             yield "Analyzing guitar for chords and notes..."

@@ -53,10 +53,10 @@ def process():
     data_json = os.path.join(subdir, 'guitar_data.json')
     guitar_file = os.path.join(subdir, 'stage2_guitar_enhanced_cut.wav')
 
-    if mode == 'trimmed':
-        orig_out = os.path.join(subdir, 'original_trimmed.wav')
-        trim_audio(input_path, start_sec, end_sec, orig_out)
-        original_file = orig_out
+    # Check if trimmed original was created by the processor
+    original_trimmed_file = os.path.join(subdir, 'original_trimmed.wav')
+    if os.path.exists(original_trimmed_file):
+        original_file = original_trimmed_file
     else:
         original_file = input_path
 
@@ -118,18 +118,16 @@ def process_stream():
         data_json = os.path.join(subdir, 'guitar_data.json')
         guitar_file = os.path.join(subdir, 'stage2_guitar_enhanced_cut.wav')
 
-        if mode == 'trimmed':
-            yield "Trimming original audio...\n"
-            logger.info("Trimming original audio")
-            orig_out = os.path.join(subdir, 'original_trimmed.wav')
-            trim_audio(input_path, start_sec, end_sec, orig_out)
-            original_file = orig_out
-            yield "Original audio trimmed.\n"
-            logger.info("Original audio trimmed")
+        # Check if trimmed original was created by the processor
+        original_trimmed_file = os.path.join(subdir, 'original_trimmed.wav')
+        if os.path.exists(original_trimmed_file):
+            original_file = original_trimmed_file
+            yield "Using processor-trimmed original audio.\n"
+            logger.info("Using processor-trimmed original audio")
         else:
-            yield "Keeping full original audio.\n"
-            logger.info("Keeping full original audio")
             original_file = input_path
+            yield "Using full original audio.\n"
+            logger.info("Using full original audio")
 
         yield "Preparing visualization data...\n"
         logger.info("Preparing visualization data")
